@@ -1,0 +1,98 @@
+%%[
+
+/* get */
+VAR @action,@entrycode,@Json,@JsonNotFound,@EmailAddress,@FirstName,@LastName,@phone,@rowCount,@row,@rows, @token
+
+SET @token = Requestparameter("t")
+
+IF NOT empty(@token) THEN 
+ SET @tokenRows = LookupRows("AccessTokens","AccessToken",@token)
+ SET @tokenRowcount = rowcount(@tokenRows)
+
+ IF  @tokenRowcount  > 0 THEN
+  
+   /* Check if token is still valid */
+   SET @tokenValid = field(row(@tokenRows, 1),"DateValid")
+   SET @timeLeftToken = dateDiff(@tokenValid, now(), 'MI')
+
+   IF @timeLeftToken > 0 THEN
+  
+   SET @action = Requestparameter("action")
+   SET @sfid = Requestparameter("sfid")
+   SET @JsonNotFound = '{"status": "fail","errorCode": "Could not find record" }'
+   SET @JsonError = '{"status": "fail","errorCode": "No action" }' 
+
+
+    IF @action == "get" and not empty (@sfid) THEN
+     
+     /* get data from SF Core */
+	     SET @rows = RetrieveSalesforceObjects('Contact', 'Id, FirstName, LastName, Email, MobilePhone', 'Id', '=', @sfid )
+
+	     SET @rowCount = rowcount(@rows)
+	   
+	      If @rowCount == 0 THEN
+	       output(v(@JsonNotFound))
+	     ENDIF
+	   
+	     IF @rowCount > 0 THEN  
+	       SET @row = row(@rows,1) 
+
+	       SET @FirstName = field(@row,"FirstName")
+	       SET @LastName = field(@row,"LastName")
+	       SET @Email = field(@row,"Email")
+	       SET @MobilePhone = field(@row,"MobilePhone")
+
+	       SET @Json= '{"status": "ok","data": {"Salesforce Id":"'
+	       SET @Json= concat(@Json,@sfid,'","email": "',@Email)
+	       SET @Json= concat(@Json,'","firstName":"',@FirstName)
+	       SET @Json= concat(@Json,'","lastName":"',@LastName)
+	       SET @Json= concat(@Json,'","mobilePhone":"',@MobilePhone,'"}')
+	       SET @Json= concat(@Json,'}')
+	        output(v(@Json))
+	     ENDIF 
+	   ENDIF
+
+
+
+	     /* Put action */
+	     SET @Email = Requestparameter("nEmail")
+	     SET @Subject = Requestparameter("nSubject")
+	     SET @Name = Requestparameter("nName")
+
+
+	  
+	     If @action=="put" and not empty(@Email) THEN
+
+	     SET  @rowsAffected = UPSERTDATA("Register",1,"EmailAddress", @Email,"Subject", @Subject, "Name", @Name)
+
+	       IF (@rowsAffected > 0) THEN
+	             SET @Json= '{"status": "ok","message": "' 
+	             SET @json = concat(@json, @timeLeftToken, 'Your information was saved correctly"}')
+	             output(v(@Json))
+	       ENDIF
+
+	       IF (@rowsAffected == 0) THEN
+	             SET @Json= '{"status": "fail","errorCode": "Failed to insert records"}'
+	             output(v(@Json))
+	       ENDIF
+
+	     ENDIF
+
+
+	     IF @action != "put" and @action != 'get' THEN
+	      output(v(@JsonError))
+	     ENDIF
+
+  	ELSE
+  		set @Json= '{"status": "fail","errorCode": "Token has expired"}'
+  		output(v(@Json))
+  	ENDIF
+	
+	ENDIF
+
+ELSE 
+	set @Json= '{"status": "fail","errorCode": "No authorisation"}'
+  output(v(@Json))
+ENDIF
+
+]%%
