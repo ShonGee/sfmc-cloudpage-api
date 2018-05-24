@@ -1,0 +1,47 @@
+%%[
+
+SET @now = now()
+
+SET @id = requestParameter('id')
+SET @secret = requestParameter('s')
+
+IF NOT empty(@id) AND NOT empty(@secret) THEN
+ SET @rows = LookupRows("API_Users","CLIENT_ID",@id,"CLIENT_SECRET",@secret)
+  SET @rowCount = rowcount(@rows)
+ 
+ IF @rowCount == 0 THEN
+   SET @json= '{"status":"error", "message":"Authorisation failure"}'
+   OUTPUT(v(@json))
+ ENDIF
+
+ IF @rowCount > 0 THEN
+   SET @row = row(@rows,1) 
+   SET @salt = field(@row,"salt") 
+    /*add your own encryption here for @encodedstr */
+   SET @dateValid = DateAdd(@now, '1','H')
+   SET @expiry = subtract(Multiply(DateDiff(@now, @dateValid, 'MI'), 60 ), 29)
+
+   SET @addToken = UpdateData("AccessTokens", 2, "ID", @id, "Secret", @secret, "AccessToken",@encodedStr, "DateValid", @dateValid) 
+
+   /* Make sure that the token is added */
+   IF @addToken == 1 THEN 
+    
+     SET @AccessTokenJson ='{"status":"OK","accessToken":"'
+     SET @AccessTokenJson=concat(@AccessTokenJson, @encodedStr, '", "expiresIn":') 
+     SET @AccessTokenJson=concat(@AccessTokenJson, @expiry, '}') 
+     OUTPUT(v(@AccessTokenJson))
+
+   ELSE 
+    SET @json= '{"Status":"error", "message":"Something has gone wrong"}'
+     OUTPUT(v(@json))
+   ENDIF
+
+ ENDIF
+ 
+ELSE 
+  SET @json= '{"Status":"error", "message":"Something has gone wrong2"}'
+  OUTPUT(v(@json))
+
+ENDIF 
+
+]%%
